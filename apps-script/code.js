@@ -1,7 +1,7 @@
 // 房產投資合夥財務管理系統 (IFMS) - 後端 Apps Script
 // 部署為 Web App，以 Anyone 存取，執行身分為 "Me"
 
-const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet() ? SpreadsheetApp.getActiveSpreadsheet().getId() : "";
+const SPREADSHEET_ID = typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet() ? SpreadsheetApp.getActiveSpreadsheet().getId() : "";
 
 // --- API 入口 ---
 
@@ -15,7 +15,17 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const requestData = JSON.parse(e.postData.contents);
+    if (!e || !e.postData || !e.postData.contents) {
+      return errorResponse("無效的請求：POST 資料內文空白 (e.postData is missing)");
+    }
+
+    let requestData;
+    try {
+      requestData = JSON.parse(e.postData.contents);
+    } catch (parseErr) {
+      return errorResponse("無效 JSON 格式：" + parseErr.message);
+    }
+
     const action = requestData.action;
     const idToken = requestData.idToken;
 
@@ -41,7 +51,7 @@ function doPost(e) {
         result = updateTransactionItem(requestData.data, userEmail);
         break;
       case "deleteAttachment":
-        result = deleteTransactionAttachment(requestData.data.transactionId);
+        result = deleteTransactionAttachment(requestData.data ? requestData.data.transactionId : null);
         break;
       case "uploadAttachment":
         result = uploadAttachmentFile(requestData.data, userEmail);
@@ -53,7 +63,7 @@ function doPost(e) {
         result = addContractItem(requestData.data, userEmail);
         break;
       case "deleteContract":
-        result = deleteContractItem(requestData.data.id);
+        result = deleteContractItem(requestData.data ? requestData.data.id : null);
         break;
       case "getLoanSummary":
         result = getLoanSummaryData();
@@ -62,19 +72,19 @@ function doPost(e) {
         result = getCashFlowForecastData();
         break;
       case "getLoanSchedule":
-        result = getLoanScheduleItems(requestData.data.contractId);
+        result = getLoanScheduleItems(requestData.data ? requestData.data.contractId : null);
         break;
       case "updateLoanPeriod":
         result = updateLoanPeriodItem(requestData.data);
         break;
       default:
-        return errorResponse("未知的操作指令。");
+        return errorResponse(`未知的操作指令 (${action})。請確認後端已部署包含此指令的最新版 code.js。`);
     }
 
     return successResponse(result);
 
   } catch (error) {
-    return errorResponse(error.toString());
+    return errorResponse("後端執行錯誤: " + error.toString());
   }
 }
 
@@ -131,8 +141,18 @@ function isUserAllowed(email) {
 
 // --- 核心邏輯：資料表操作與計算 ---
 
+function getSpreadsheet() {
+  if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet()) {
+    return SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (SPREADSHEET_ID) {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  }
+  throw new Error("無法存取 Google 試算表。請確認 Apps Script 已與試算表連結，或於 code.js 中設定 SPREADSHEET_ID。");
+}
+
 function getSheetByName(name) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   let sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);

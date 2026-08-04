@@ -92,15 +92,17 @@ window.handleCredentialResponse = function (response) {
 };
 
 // --- API 溝通 ---
-async function callAPI(action, data = null) {
+async function callAPI(action, data = null, options = {}) {
+  const { suppressAlert = false } = options;
+
   if (!appState.idToken) {
-    alert("您尚未登入或 Session 已過期。");
+    if (!suppressAlert) alert("您尚未登入或 Session 已過期。");
     logout();
     return null;
   }
 
-  if (CONFIG.GAS_API_URL === "YOUR_GAS_API_URL") {
-    alert("請先在 app.js 的 CONFIG 中設定正確的 GAS_API_URL。");
+  if (CONFIG.GAS_API_URL === "YOUR_GAS_API_URL" || !CONFIG.GAS_API_URL) {
+    if (!suppressAlert) alert("請先在 config.js 中設定正確的 GAS_API_URL。");
     showLoading(false);
     return null;
   }
@@ -114,56 +116,83 @@ async function callAPI(action, data = null) {
 
     const response = await fetch(CONFIG.GAS_API_URL, {
       method: "POST",
-      body: JSON.stringify(payload)
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payload),
+      redirect: "follow"
     });
 
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseErr) {
+      if (responseText.includes("<!DOCTYPE") || responseText.includes("<html")) {
+        throw new Error("後端傳回 HTML 網頁。請確認 Google Apps Script 部署權限設定：\n1. Web App 的「誰有存取權限」是否設為「所有人 (Anyone)」\n2. 執行身分是否設為「我 (Me)」");
+      }
+      throw new Error(`無效的 JSON 回應: ${responseText.slice(0, 100)}`);
+    }
+
+    // 檢查是否誤中 doGet (HTTP 302 將 POST 轉為 GET 時)
+    if (result.status === "ok" && result.message) {
+      throw new Error(`API 請求被轉換為 GET 請求 (${result.message})。請重新發布/更新 Apps Script 部署。`);
+    }
+
     if (result.success) {
       return result.data;
     } else {
-      throw new Error(result.message);
+      throw new Error(result.message || "未知的後端錯誤");
     }
   } catch (error) {
     console.error(`API Error (${action}):`, error);
-    alert(`系統錯誤: ${error.message}`);
+    if (!suppressAlert) {
+      alert(`API 錯誤 (${action}):\n${error.message}`);
+    }
     return null;
   }
 }
 
 // 取得最新資料並渲染畫面
 async function fetchData() {
-  const dashboardData = await callAPI("getDashboard");
-  const txData = await callAPI("getTransactions");
-  const contractsData = await callAPI("getContracts");
-  const loanSummaryData = await callAPI("getLoanSummary");
-  const cashflowData = await callAPI("getCashFlowForecast");
+  const [dashboardData, txData, contractsData, loanSummaryData, cashflowData] = await Promise.all([
+    callAPI("getDashboard", null, { suppressAlert: true }),
+    callAPI("getTransactions", null, { suppressAlert: true }),
+    callAPI("getContracts", null, { suppressAlert: true }),
+    callAPI("getLoanSummary", null, { suppressAlert: true }),
+    callAPI("getCashFlowForecast", null, { suppressAlert: true })
+  ]);
 
-  if (dashboardData && txData) {
-    appState.dashboard = dashboardData;
-    appState.transactions = txData;
-    appState.contracts = contractsData || [];
-    appState.loanSummary = loanSummaryData || { hasLoan: false };
-    appState.cashflowForecast = cashflowData || [];
-
-    // 解析 Token 中的使用者資訊以顯示名稱
-    try {
-      const payload = JSON.parse(atob(appState.idToken.split('.')[1]));
-      appState.userProfile = payload;
-      document.getElementById("user-display-name").innerText = payload.name || payload.email;
-      document.getElementById("settings-user-email").innerText = payload.email || "-";
-    } catch (e) {
-      document.getElementById("user-display-name").innerText = "合夥人";
-    }
-
-    renderDashboard();
-    renderLoanSummary();
-    renderCashFlowForecast();
-    renderTransactions(appState.transactions);
-    renderContracts();
-
-    document.getElementById("login-container").classList.add("hidden");
-    document.getElementById("app-container").classList.remove("hidden");
+  if (!dashboardData && !txData) {
+    alert("無法取得核心資料。\n\n常見原因與解決步驟：\n1. Google Apps Script 尚未部署最新程式碼（請至 Apps Script 點擊「部署」->「管理部署」->「選擇最新版本 (New version)」）。\n2. Web App 存取權限未設為「所有人 (Anyone)」。\n3. Google 帳號 Token 已過期，請嘗試重新登入。");
+    showLoading(false);
+    return;
   }
+
+  appState.dashboard = dashboardData || {};
+  appState.transactions = txData || [];
+  appState.contracts = contractsData || [];
+  appState.loanSummary = loanSummaryData || { hasLoan: false };
+  appState.cashflowForecast = cashflowData || [];
+
+  // 解析 Token 中的使用者資訊以顯示名稱
+  try {
+    const payload = JSON.parse(atob(appState.idToken.split('.')[1]));
+    appState.userProfile = payload;
+    document.getElementById("user-display-name").innerText = payload.name || payload.email;
+    document.getElementById("settings-user-email").innerText = payload.email || "-";
+  } catch (e) {
+    document.getElementById("user-display-name").innerText = "合夥人";
+  }
+
+  renderDashboard();
+  renderLoanSummary();
+  renderCashFlowForecast();
+  renderTransactions(appState.transactions);
+  renderContracts();
+
+  document.getElementById("login-container").classList.add("hidden");
+  document.getElementById("app-container").classList.remove("hidden");
   showLoading(false);
 }
 
