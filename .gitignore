@@ -5,6 +5,7 @@ frontend/config.js
 
 # 內部系統規格與技術文件
 md/
+output_html/
 
 # 系統與 IDE 暫存檔
 .DS_Store

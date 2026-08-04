@@ -47,7 +47,7 @@
     <header class="main-header">
       <div class="header-logo">
         <i class="fa-solid fa-house-circle-check"></i>
-        <span>IFMS <small>v2.0</small></span>
+        <span>IFMS <small>v2.1</small></span>
       </div>
       <!-- 桌上型導覽列 (電腦版顯示在頂部) -->
       <nav class="desktop-nav">
@@ -100,102 +100,98 @@
       <!-- 1. 儀表板 (Dashboard Tab) -->
       <div id="tab-dashboard" class="tab-content active">
         <section class="dashboard-section">
-          <!-- 結算狀態看板 (最顯眼) -->
-          <div class="settlement-banner card">
-            <div class="settlement-info">
-              <span class="label">當前結算狀態</span>
-              <h2 id="settlement-status-text">載入中...</h2>
-            </div>
-            <div class="settlement-visual">
-              <div id="settlement-bar-container" class="settlement-bar-container">
-                <div class="bar-labels">
-                  <span>Joanna</span>
-                  <span>Elaine</span>
+          <!-- 頂部合夥對帳與結算狀態聯合大卡片 -->
+          <div class="dashboard-header-bar card" style="display:flex; flex-direction:column; gap:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; width:100%;">
+              <div class="header-title" style="text-align:left;">
+                <h3 style="margin:0; text-align:left;"><i class="fa-solid fa-chart-line"></i> 財務總覽與合夥對帳</h3>
+              </div>
+              <div class="header-controls" style="display:flex; align-items:center; gap:12px; margin-left:auto;">
+                <div class="filter-box">
+                  <label for="dashboard-stage-filter"><i class="fa-solid fa-filter"></i> 階段：</label>
+                  <select id="dashboard-stage-filter" class="stage-select">
+                    <option value="all" selected>全期間 (預設)</option>
+                    <option value="前期">前期 (預售)</option>
+                    <option value="中期">中期 (持有)</option>
+                  </select>
                 </div>
-                <div class="progress-track">
-                  <div id="settlement-progress-bar" class="progress-fill"></div>
+                <button id="btn-open-settlement-report" class="btn-primary btn-settlement">
+                  <i class="fa-solid fa-file-invoice-dollar"></i> 發起對帳 / 產生 LINE 報告
+                </button>
+              </div>
+            </div>
+            <hr style="border:0; border-top:1px dashed var(--border-color); margin:0;">
+            <div class="settlement-banner-inner" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; width:100%;">
+              <div class="settlement-info" style="text-align:left;">
+                <span class="label" style="font-size:0.8rem; color:var(--text-card-muted); display:block; margin-bottom:4px; text-align:left;">當前結算狀態</span>
+                <h2 id="settlement-status-text" style="font-size:1.35rem; font-weight:700; margin:0; text-align:left;">載入中...</h2>
+              </div>
+              <div class="settlement-visual" style="flex:1; max-width:360px; min-width:240px; margin-left:auto;">
+                <div id="settlement-bar-container" class="settlement-bar-container">
+                  <div class="bar-labels">
+                    <span>Joanna</span>
+                    <span>Elaine</span>
+                  </div>
+                  <div class="progress-track">
+                    <div id="settlement-progress-bar" class="progress-fill"></div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- 數據指標卡片 -->
+          <!-- 4 大數據指標卡片 (帶 i 提示圖示與下方詳細算式說明) -->
           <div class="metrics-grid">
             <div class="metric-card card">
+              <i class="fa-solid fa-circle-info metric-info-icon" title="所有標記為「支出」的交易金額加總 (包含 A 代墊 + B 代墊 + 共同帳戶付出)"></i>
               <div class="metric-icon expense-icon">
                 <i class="fa-solid fa-wallet"></i>
               </div>
               <div class="metric-details">
                 <span class="metric-label">累積投入總支出</span>
                 <h3 id="metric-total-expense">$0</h3>
+                <div style="font-size:0.75rem; color:var(--text-card-muted); margin-top:2px;">(A 代墊 + B 代墊 + 共同帳戶支出)</div>
               </div>
             </div>
 
             <div class="metric-card card">
+              <i class="fa-solid fa-circle-info metric-info-icon" title="所有標記為「收入」的交易金額加總"></i>
               <div class="metric-icon income-icon">
                 <i class="fa-solid fa-hand-holding-dollar"></i>
               </div>
               <div class="metric-details">
                 <span class="metric-label">累積租金/其他收入</span>
                 <h3 id="metric-total-income">$0</h3>
+                <div style="font-size:0.75rem; color:var(--text-card-muted); margin-top:2px;">(所有標記為收入的金額加總)</div>
               </div>
             </div>
 
             <div class="metric-card card">
+              <i class="fa-solid fa-circle-info metric-info-icon" title="累積投入總支出 - 累積租金/其他收入 (目前合夥資產已淨投入的總資金)"></i>
               <div class="metric-icon net-icon">
                 <i class="fa-solid fa-coins"></i>
               </div>
               <div class="metric-details">
                 <span class="metric-label">房產淨投入成本</span>
                 <h3 id="metric-net-cost">$0</h3>
+                <div style="font-size:0.75rem; color:var(--text-card-muted); margin-top:2px;">(累積總支出 - 累積總收益)</div>
               </div>
             </div>
 
             <div class="metric-card card">
+              <i class="fa-solid fa-circle-info metric-info-icon" title="A 存入 + B 存入 + 共同帳戶收入 - 共同帳戶支出 - A/B 借支 (共同帳戶當前可用現金)"></i>
               <div class="metric-icon joint-icon">
                 <i class="fa-solid fa-building-columns"></i>
               </div>
               <div class="metric-details">
                 <span class="metric-label">華南共同帳戶餘額</span>
                 <h3 id="metric-joint-cash">$0</h3>
+                <div style="font-size:0.75rem; color:var(--text-card-muted); margin-top:2px;">(預存存入 + 收益 - 支出 - 借支)</div>
               </div>
             </div>
           </div>
 
-          <!-- 雙方財務詳情卡片 -->
-          <div class="partners-grid">
-            <div class="partner-card card">
-              <h4>Joanna</h4>
-              <div class="p-details">
-                <div class="p-row"><span>實際支出代墊：</span><strong id="partner-a-paid">$0</strong></div>
-                <div class="p-row"><span>應分攤支出：</span><strong id="partner-a-should-pay">$0</strong></div>
-                <div class="p-row"><span>實際收到收入：</span><strong id="partner-a-received">$0</strong></div>
-                <div class="p-row"><span>應分攤收入：</span><strong id="partner-a-should-get">$0</strong></div>
-                <div class="p-row"><span>合夥人沖帳額：</span><strong id="partner-a-recon">$0</strong></div>
-                <div class="p-row"><span>預存共同帳戶：</span><strong id="partner-a-deposit">$0</strong></div>
-                <div class="p-row"><span>共同帳戶借支：</span><strong id="partner-a-borrow">$0</strong></div>
-                <hr>
-                <div class="p-row total-row"><span>代墊淨額：</span><span id="partner-a-advance" class="advance-status">$0</span></div>
-              </div>
-            </div>
-
-            <div class="partner-card card">
-              <h4>Elaine</h4>
-              <div class="p-details">
-                <div class="p-row"><span>實際支出代墊：</span><strong id="partner-b-paid">$0</strong></div>
-                <div class="p-row"><span>應分攤支出：</span><strong id="partner-b-should-pay">$0</strong></div>
-                <div class="p-row"><span>實際收到收入：</span><strong id="partner-b-received">$0</strong></div>
-                <div class="p-row"><span>應分攤收入：</span><strong id="partner-b-should-get">$0</strong></div>
-                <div class="p-row"><span>合夥人沖帳額：</span><strong id="partner-b-recon">$0</strong></div>
-                <div class="p-row"><span>預存共同帳戶：</span><strong id="partner-b-deposit">$0</strong></div>
-                <div class="p-row"><span>共同帳戶借支：</span><strong id="partner-b-borrow">$0</strong></div>
-                <hr>
-                <div class="p-row total-row"><span>代墊淨額：</span><span id="partner-b-advance" class="advance-status">$0</span></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 房貸概況與 6 個月現金流預測區塊 -->
+          <!-- 房貸概況與 6 個月現金流預測區塊 (往上移至 Joanna / Elaine 上方) -->
           <div class="analytics-grid">
             <!-- 房貸資訊卡片 -->
             <div class="loan-summary-card card">
@@ -215,8 +211,48 @@
                 <span class="sub-text">以房貸攤還與租約計算</span>
               </div>
               <div id="cashflow-chart-container" class="cashflow-chart-container">
-                <!-- 動態生成 6 個月柱狀圖 -->
                 <div class="text-center text-muted" style="padding: 20px;">載入現金流預測中...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 雙方財務詳情卡片 (置於下方) -->
+          <div class="partners-grid">
+            <div class="partner-card card">
+              <h4>Joanna</h4>
+              <div class="p-details">
+                <div class="p-row actual-out-row" style="background: rgba(37, 99, 235, 0.08); padding: 6px 10px; border-radius: 6px; margin-bottom: 8px;">
+                  <span>實際出資總額 <i class="fa-solid fa-circle-info inline-info-icon" title="個人實際自口袋付出的現金淨額 = 個人代墊支出 + 預存共同帳戶 + 給對方的沖帳 - 收到對方的沖帳 - 個人借支"></i>：</span>
+                  <strong id="partner-a-actual-out" style="color: var(--primary); font-size: 1.05rem;">$0</strong>
+                </div>
+                <div class="p-row"><span>實際支出代墊：</span><strong id="partner-a-paid">$0</strong></div>
+                <div class="p-row"><span>應分攤支出：</span><strong id="partner-a-should-pay">$0</strong></div>
+                <div class="p-row"><span>實際收到收入：</span><strong id="partner-a-received">$0</strong></div>
+                <div class="p-row"><span>應分攤收入：</span><strong id="partner-a-should-get">$0</strong></div>
+                <div class="p-row"><span>合夥人沖帳額：</span><strong id="partner-a-recon">$0</strong></div>
+                <div class="p-row"><span>預存共同帳戶：</span><strong id="partner-a-deposit">$0</strong></div>
+                <div class="p-row"><span>共同帳戶借支：</span><strong id="partner-a-borrow">$0</strong></div>
+                <hr>
+                <div class="p-row total-row"><span>代墊淨額：</span><span id="partner-a-advance" class="advance-status">$0</span></div>
+              </div>
+            </div>
+
+            <div class="partner-card card">
+              <h4>Elaine</h4>
+              <div class="p-details">
+                <div class="p-row actual-out-row" style="background: rgba(37, 99, 235, 0.08); padding: 6px 10px; border-radius: 6px; margin-bottom: 8px;">
+                  <span>實際出資總額 <i class="fa-solid fa-circle-info inline-info-icon" title="個人實際自口袋付出的現金淨額 = 個人代墊支出 + 預存共同帳戶 + 給對方的沖帳 - 收到對方的沖帳 - 個人借支"></i>：</span>
+                  <strong id="partner-b-actual-out" style="color: var(--primary); font-size: 1.05rem;">$0</strong>
+                </div>
+                <div class="p-row"><span>實際支出代墊：</span><strong id="partner-b-paid">$0</strong></div>
+                <div class="p-row"><span>應分攤支出：</span><strong id="partner-b-should-pay">$0</strong></div>
+                <div class="p-row"><span>實際收到收入：</span><strong id="partner-b-received">$0</strong></div>
+                <div class="p-row"><span>應分攤收入：</span><strong id="partner-b-should-get">$0</strong></div>
+                <div class="p-row"><span>合夥人沖帳額：</span><strong id="partner-b-recon">$0</strong></div>
+                <div class="p-row"><span>預存共同帳戶：</span><strong id="partner-b-deposit">$0</strong></div>
+                <div class="p-row"><span>共同帳戶借支：</span><strong id="partner-b-borrow">$0</strong></div>
+                <hr>
+                <div class="p-row total-row"><span>代墊淨額：</span><span id="partner-b-advance" class="advance-status">$0</span></div>
               </div>
             </div>
           </div>
@@ -268,8 +304,8 @@
             </div>
           </div>
 
-          <!-- 交易列表 -->
-          <div class="transactions-table-wrapper card">
+          <!-- 交易列表 (桌上型表格) -->
+          <div class="transactions-table-wrapper card desktop-only">
             <table class="transactions-table">
               <thead>
                 <tr>
@@ -290,6 +326,11 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- 手機版流水帳卡片清單 (Mobile Cards) -->
+          <div id="mobile-tx-cards-list" class="mobile-tx-cards-list mobile-only">
+            <div class="card text-center text-muted" style="padding: 20px;">載入流水帳明細中...</div>
           </div>
         </section>
       </div>
@@ -357,21 +398,8 @@
               <div class="p-details" style="margin-top: 15px;">
                 <div class="p-row"><span>使用者 Email：</span><strong id="settings-user-email">-</strong></div>
                 <div class="p-row"><span>系統權限：</span><strong id="settings-user-role">管理員 (Admin)</strong></div>
-                <div class="p-row"><span>系統版本：</span><strong>IFMS v2.0 (Phase 2)</strong></div>
+                <div class="p-row"><span>系統版本：</span><strong>IFMS v2.1</strong></div>
               </div>
-            </div>
-
-            <div class="card">
-              <h3><i class="fa-solid fa-cloud-arrow-up"></i> GitHub Pages 外網部署指引</h3>
-              <p class="text-muted" style="margin-top: 10px; font-size: 0.9rem; line-height: 1.6;">
-                如欲讓合夥人在外網隨時使用手機開啟本系統，請將專案中的 <code>/frontend</code> 資料夾推送到 GitHub 並開啟 GitHub Pages：
-              </p>
-              <ol style="margin-top: 10px; margin-left: 20px; font-size: 0.85rem; color: var(--text-card-main); line-height: 1.8;">
-                <li>建立一個 GitHub Repository (如 <code>IFMS-web</code>) 並上傳前端檔案。</li>
-                <li>於 GitHub 設定中啟動 <strong>GitHub Pages</strong> 發佈。</li>
-                <li>複製發佈的網址 (如 <code>https://username.github.io/IFMS-web/</code>)。</li>
-                <li>前往 Google Cloud Console 將該網址加入「已授權的 JavaScript 來源」。</li>
-              </ol>
             </div>
           </div>
         </section>
@@ -606,6 +634,27 @@
   <div id="image-viewer-modal" class="modal image-viewer-modal">
     <span class="btn-close-viewer">&times;</span>
     <img id="viewer-img" class="viewer-content" src="" alt="放大收據">
+  </div>
+
+  <!-- 一鍵結算對帳單 Modal -->
+  <div id="settlement-report-modal" class="modal">
+    <div class="modal-content card settlement-report-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-invoice-dollar"></i> 房產合夥結算對帳單</h3>
+        <button id="close-settlement-modal-btn" class="btn-close">&times;</button>
+      </div>
+      <div class="settlement-report-body">
+        <div id="settlement-report-content" class="report-content-area">
+          <!-- 動態生成對帳內容 -->
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="copy-line-msg-btn" class="btn-primary btn-line">
+          <i class="fa-brands fa-line"></i> 複製 LINE 結算訊息
+        </button>
+        <button type="button" id="close-settlement-report-btn" class="btn-secondary">關閉</button>
+      </div>
+    </div>
   </div>
 
   <script src="config.js"></script>

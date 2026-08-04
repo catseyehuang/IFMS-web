@@ -233,12 +233,104 @@ async function fetchData() {
 
 // --- 畫面渲染 ---
 
-function renderDashboard() {
-  const db = appState.dashboard;
+function calculateFilteredDashboard(selectedStage = "all") {
+  if (!appState.dashboard) return null;
+
+  if (selectedStage === "all" || !selectedStage) {
+    const db = appState.dashboard;
+    if (db.partners && db.partners.A && db.partners.B) {
+      db.partners.A.actualOut = (db.partners.A.paid || 0) + (db.partners.A.deposit || 0) + (db.partners.A.reconPaid || 0) - (db.partners.B.reconPaid || 0) - (db.partners.A.borrow || 0);
+      db.partners.B.actualOut = (db.partners.B.paid || 0) + (db.partners.B.deposit || 0) + (db.partners.B.reconPaid || 0) - (db.partners.A.reconPaid || 0) - (db.partners.B.borrow || 0);
+    }
+    return db;
+  }
+
+  // 客戶端計算過濾後的特定階段數據
+  const filteredTxs = appState.transactions.filter(tx => tx.stage === selectedStage);
+  
+  let totalExpense = 0;
+  let totalIncome = 0;
+  let paidA = 0, paidB = 0, jointExpense = 0;
+  let receivedA = 0, receivedB = 0, jointIncome = 0;
+  let reconA = 0, reconB = 0;
+  let depositA = 0, depositB = 0;
+  let borrowA = 0, borrowB = 0;
+
+  filteredTxs.forEach(tx => {
+    const amt = parseFloat(tx.amount) || 0;
+    if (tx.type === "支出") {
+      totalExpense += amt;
+      if (tx.payer === "A") paidA += amt;
+      else if (tx.payer === "B") paidB += amt;
+      else if (tx.payer === "共同帳戶") jointExpense += amt;
+    } else if (tx.type === "收入") {
+      totalIncome += amt;
+      if (tx.payer === "A") receivedA += amt;
+      else if (tx.payer === "B") receivedB += amt;
+      else if (tx.payer === "共同帳戶") jointIncome += amt;
+    } else if (tx.type === "沖帳") {
+      if (tx.payer === "A") reconA += amt;
+      else if (tx.payer === "B") reconB += amt;
+    } else if (tx.type === "存入共同帳戶") {
+      if (tx.payer === "A") depositA += amt;
+      else if (tx.payer === "B") depositB += amt;
+    } else if (tx.type === "從共同帳戶借支") {
+      if (tx.payer === "A") borrowA += amt;
+      else if (tx.payer === "B") borrowB += amt;
+    }
+  });
+
+  const ratioA = 0.5;
+  const ratioB = 0.5;
+  const shouldPayA = totalExpense * ratioA;
+  const shouldPayB = totalExpense * ratioB;
+  const shouldGetA = totalIncome * ratioA;
+  const shouldGetB = totalIncome * ratioB;
+
+  const netAdvanceA = (paidA - shouldPayA) - (receivedA - shouldGetA) + (reconA - reconB) + depositA - borrowA;
+  const netAdvanceB = (paidB - shouldPayB) - (receivedB - shouldGetB) + (reconB - reconA) + depositB - borrowB;
+
+  // 個人口袋實際出資總額 (代墊 + 存入共同帳戶 + 支付對手的沖帳 - 收到對手的沖帳 - 借支)
+  const actualOutA = paidA + depositA + reconA - reconB - borrowA;
+  const actualOutB = paidB + depositB + reconB - reconA - borrowB;
+
+  let whosAdvancing = "EVEN";
+  let settlementAmount = 0;
+  if (netAdvanceA > netAdvanceB) {
+    whosAdvancing = "A";
+    settlementAmount = (netAdvanceA - netAdvanceB) / 2;
+  } else if (netAdvanceB > netAdvanceA) {
+    whosAdvancing = "B";
+    settlementAmount = (netAdvanceB - netAdvanceA) / 2;
+  }
+
+  const jointCash = depositA + depositB + jointIncome - jointExpense - borrowA - borrowB;
+
+  return {
+    summary: {
+      totalExpense,
+      totalIncome,
+      netCost: totalExpense - totalIncome,
+      jointCash
+    },
+    currentRatio: appState.dashboard ? appState.dashboard.currentRatio : { ratioA: 0.5, ratioB: 0.5 },
+    partners: {
+      A: { paid: paidA, shouldPay: shouldPayA, received: receivedA, shouldGet: shouldGetA, reconPaid: reconA, deposit: depositA, borrow: borrowA, netAdvance: netAdvanceA, actualOut: actualOutA },
+      B: { paid: paidB, shouldPay: shouldPayB, received: receivedB, shouldGet: shouldGetB, reconPaid: reconB, deposit: depositB, borrow: borrowB, netAdvance: netAdvanceB, actualOut: actualOutB }
+    },
+    settlement: {
+      whosAdvancing,
+      amount: settlementAmount
+    }
+  };
+}
+
+function renderDashboard(selectedStage = "all") {
+  const db = calculateFilteredDashboard(selectedStage);
   if (!db) return;
 
-  // 格式化貨幣
-  const formatCurrency = (val) => "$" + Math.round(val).toLocaleString();
+  // 格式化貨幣 (防護 NaN)
+  const formatCurrency = (val) => "$" + Math.round(parseFloat(val) || 0).toLocaleString();
 
   // 數據指標
   document.getElementById("metric-total-expense").innerText = formatCurrency(db.summary.totalExpense);
@@ -250,24 +342,31 @@ function renderDashboard() {
   }
   document.getElementById("metric-joint-cash").innerText = formatCurrency(db.summary.jointCash);
 
-  // 雙方財務詳情
-  document.getElementById("partner-a-paid").innerText = formatCurrency(db.partners.A.paid);
-  document.getElementById("partner-a-should-pay").innerText = formatCurrency(db.partners.A.shouldPay);
-  document.getElementById("partner-a-received").innerText = formatCurrency(db.partners.A.received);
-  document.getElementById("partner-a-should-get").innerText = formatCurrency(db.partners.A.shouldGet);
-  document.getElementById("partner-a-recon").innerText = formatCurrency(db.partners.A.reconPaid);
-  document.getElementById("partner-a-deposit").innerText = formatCurrency(db.partners.A.deposit || 0);
-  document.getElementById("partner-a-borrow").innerText = formatCurrency(db.partners.A.borrow || 0);
+  // 雙方財務詳情 (含口袋實際出資總額)
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = formatCurrency(val);
+  };
 
-  document.getElementById("partner-b-paid").innerText = formatCurrency(db.partners.B.paid);
-  document.getElementById("partner-b-should-pay").innerText = formatCurrency(db.partners.B.shouldPay);
-  document.getElementById("partner-b-received").innerText = formatCurrency(db.partners.B.received);
-  document.getElementById("partner-b-should-get").innerText = formatCurrency(db.partners.B.shouldGet);
-  document.getElementById("partner-b-recon").innerText = formatCurrency(db.partners.B.reconPaid);
-  document.getElementById("partner-b-deposit").innerText = formatCurrency(db.partners.B.deposit || 0);
-  document.getElementById("partner-b-borrow").innerText = formatCurrency(db.partners.B.borrow || 0);
+  setEl("partner-a-actual-out", db.partners.A.actualOut);
+  setEl("partner-a-paid", db.partners.A.paid);
+  setEl("partner-a-should-pay", db.partners.A.shouldPay);
+  setEl("partner-a-received", db.partners.A.received);
+  setEl("partner-a-should-get", db.partners.A.shouldGet);
+  setEl("partner-a-recon", db.partners.A.reconPaid);
+  setEl("partner-a-deposit", db.partners.A.deposit || 0);
+  setEl("partner-a-borrow", db.partners.A.borrow || 0);
 
-  // 代墊狀態與樣式調整
+  setEl("partner-b-actual-out", db.partners.B.actualOut);
+  setEl("partner-b-paid", db.partners.B.paid);
+  setEl("partner-b-should-pay", db.partners.B.shouldPay);
+  setEl("partner-b-received", db.partners.B.received);
+  setEl("partner-b-should-get", db.partners.B.shouldGet);
+  setEl("partner-b-recon", db.partners.B.reconPaid);
+  setEl("partner-b-deposit", db.partners.B.deposit || 0);
+  setEl("partner-b-borrow", db.partners.B.borrow || 0);
+
+  // 代墊狀態與高亮樣式調整
   const renderAdvanceBalance = (elementId, value) => {
     const el = document.getElementById(elementId);
     el.className = "advance-status";
@@ -292,11 +391,9 @@ function renderDashboard() {
 
   if (db.settlement.whosAdvancing === "A") {
     bannerText.innerHTML = `Elaine 需償還 <span style="color:var(--sage-green);font-weight:700;">${formatCurrency(db.settlement.amount)}</span> 給 A (Joanna)`;
-    // 進度條偏向 A (例如 A 代墊多，進度條到 75%)
     progressBar.style.width = "75%";
   } else if (db.settlement.whosAdvancing === "B") {
     bannerText.innerHTML = `Joanna 需償還 <span style="color:var(--accent-gold);font-weight:700;">${formatCurrency(db.settlement.amount)}</span> 給 Elaine`;
-    // 進度條偏向 B (例如 B 代墊多，進度條到 25%)
     progressBar.style.width = "25%";
   } else {
     bannerText.innerText = "雙方代墊款項已完全結清！";
@@ -306,14 +403,21 @@ function renderDashboard() {
 
 function renderTransactions(txs) {
   const tbody = document.getElementById("transactions-list-body");
+  const mobileContainer = document.getElementById("mobile-tx-cards-list");
+
   tbody.innerHTML = "";
+  if (mobileContainer) mobileContainer.innerHTML = "";
 
   if (txs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="color:var(--text-muted);">查無符合的交易紀錄</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center" style="color:var(--text-muted);">查無符合的交易紀錄</td></tr>`;
+    if (mobileContainer) {
+      mobileContainer.innerHTML = `<div class="card text-center text-muted" style="padding: 20px;">查無符合的交易紀錄</div>`;
+    }
     return;
   }
 
   txs.forEach(tx => {
+    // 1. 桌面版表格渲染
     const tr = document.createElement("tr");
 
     // 類型標籤樣式
@@ -324,10 +428,8 @@ function renderTransactions(txs) {
     else if (tx.type === "從共同帳戶借支") typeClass = "borrow";
     else typeClass = "recon";
 
-    // 期別標籤
     const stageTag = `<span class="stage-tag">${tx.stage}</span>`;
 
-    // 附件按鈕
     let attachmentCell = "";
     if (tx.attachments && tx.attachments.length > 0) {
       tx.attachments.forEach(url => {
@@ -337,7 +439,6 @@ function renderTransactions(txs) {
       attachmentCell = `<span style="color:var(--text-muted);font-size:0.8rem;">無附件</span>`;
     }
 
-    // 備註長度限制
     const desc = tx.description || "";
 
     tr.innerHTML = `
@@ -352,23 +453,55 @@ function renderTransactions(txs) {
       <td><button class="btn-edit" data-id="${tx.id}"><i class="fa-solid fa-pen-to-square"></i> 編輯</button></td>
     `;
 
-    // 為收據連結綁定點擊事件放大圖片
     if (tx.attachments && tx.attachments.length > 0) {
       const link = tr.querySelector(".att-link");
       if (link) {
-        link.addEventListener("click", () => {
-          openImageViewer(tx.attachments[0]);
-        });
+        link.addEventListener("click", () => openImageViewer(tx.attachments[0]));
       }
     }
 
-    // 綁定編輯按鈕事件
     const editBtn = tr.querySelector(".btn-edit");
-    editBtn.addEventListener("click", () => {
-      openEditModal(tx);
-    });
+    editBtn.addEventListener("click", () => openEditModal(tx));
 
     tbody.appendChild(tr);
+
+    // 2. 手機版卡片渲染
+    if (mobileContainer) {
+      const card = document.createElement("div");
+      card.className = "mobile-tx-card";
+      let amountPrefix = (tx.type === "支出" || tx.type === "從共同帳戶借支") ? "-" : (tx.type === "收入" || tx.type === "存入共同帳戶" ? "+" : "");
+
+      card.innerHTML = `
+        <div class="tx-card-header">
+          <span class="tx-card-date"><i class="fa-regular fa-calendar"></i> ${tx.date}</span>
+          <span class="stage-tag">${tx.stage}</span>
+        </div>
+        <div class="tx-card-body">
+          <div class="tx-card-category">${tx.category} <small style="font-weight:400;color:var(--text-card-muted);">(${tx.type})</small></div>
+          <div class="tx-card-amount ${typeClass}">${amountPrefix}$${Math.round(tx.amount).toLocaleString()}</div>
+        </div>
+        ${desc ? `<div style="font-size:0.85rem;color:var(--text-card-muted);">${desc}</div>` : ''}
+        <div class="tx-card-footer">
+          <div class="tx-card-payer"><i class="fa-solid fa-user"></i> 經手: ${tx.payer === "A" ? "Joanna" : (tx.payer === "B" ? "Elaine" : "共同帳戶")}</div>
+          <div style="display:flex;gap:8px;">
+            ${tx.attachments && tx.attachments.length > 0 ? `<button class="btn-secondary btn-view-att" style="padding:4px 10px;font-size:0.8rem;"><i class="fa-solid fa-receipt"></i> 收據</button>` : ''}
+            <button class="btn-edit btn-mobile-edit" data-id="${tx.id}" style="padding:4px 10px;font-size:0.8rem;"><i class="fa-solid fa-pen-to-square"></i> 編輯</button>
+          </div>
+        </div>
+      `;
+
+      if (tx.attachments && tx.attachments.length > 0) {
+        const attBtn = card.querySelector(".btn-view-att");
+        if (attBtn) {
+          attBtn.addEventListener("click", () => openImageViewer(tx.attachments[0]));
+        }
+      }
+
+      const cardEditBtn = card.querySelector(".btn-mobile-edit");
+      cardEditBtn.addEventListener("click", () => openEditModal(tx));
+
+      mobileContainer.appendChild(card);
+    }
   });
 }
 
@@ -511,9 +644,182 @@ function setupEventListeners() {
 
   // 關閉圖片檢視器
   const viewerModal = document.getElementById("image-viewer-modal");
-  viewerModal.addEventListener("click", () => {
-    viewerModal.classList.remove("open");
+  viewerModal.addEventListener("click", (e) => {
+    if (e.target === viewerModal || e.target.classList.contains("btn-close-viewer")) {
+      viewerModal.classList.remove("open");
+      const iframe = document.getElementById("viewer-iframe");
+      if (iframe) iframe.src = "";
+    }
   });
+
+  // 儀表板階段篩選器切換
+  const dashboardStageFilter = document.getElementById("dashboard-stage-filter");
+  if (dashboardStageFilter) {
+    dashboardStageFilter.addEventListener("change", (e) => {
+      renderDashboard(e.target.value);
+    });
+  }
+
+  // 開啟對帳報告 Modal
+  const openReportBtn = document.getElementById("btn-open-settlement-report");
+  if (openReportBtn) {
+    openReportBtn.addEventListener("click", openSettlementReportModal);
+  }
+
+  // 複製 LINE 結算訊息
+  const copyLineBtn = document.getElementById("copy-line-msg-btn");
+  if (copyLineBtn) {
+    copyLineBtn.addEventListener("click", copyLineSettlementMessage);
+  }
+
+  // 關閉對帳報告 Modal
+  const reportModal = document.getElementById("settlement-report-modal");
+  const closeReportModal = () => reportModal && reportModal.classList.remove("open");
+  const closeReportBtn1 = document.getElementById("close-settlement-modal-btn");
+  const closeReportBtn2 = document.getElementById("close-settlement-report-btn");
+  if (closeReportBtn1) closeReportBtn1.addEventListener("click", closeReportModal);
+  if (closeReportBtn2) closeReportBtn2.addEventListener("click", closeReportModal);
+}
+
+// 產生並開啟對帳單 Modal
+function openSettlementReportModal() {
+  const modal = document.getElementById("settlement-report-modal");
+  const contentArea = document.getElementById("settlement-report-content");
+  const stageFilterEl = document.getElementById("dashboard-stage-filter");
+  const stage = stageFilterEl ? stageFilterEl.value : "all";
+  const db = calculateFilteredDashboard(stage);
+
+  if (!db) return;
+
+  const stageLabel = stage === "all" ? "全期間總計" : stage;
+  const formatCurrency = (val) => "$" + Math.round(parseFloat(val) || 0).toLocaleString();
+
+  let verdictBadge = "";
+  if (db.settlement.whosAdvancing === "A") {
+    verdictBadge = `👉 Elaine 需補付給 Joanna (A)：<strong style="color:var(--sage-green);font-size:1.25rem;">${formatCurrency(db.settlement.amount)}</strong>`;
+  } else if (db.settlement.whosAdvancing === "B") {
+    verdictBadge = `👉 Joanna 需補付給 Elaine (B)：<strong style="color:var(--accent-gold);font-size:1.25rem;">${formatCurrency(db.settlement.amount)}</strong>`;
+  } else {
+    verdictBadge = `👉 雙方代墊款項對等，無須補付結算！`;
+  }
+
+  contentArea.innerHTML = `
+    <div class="settlement-report-header">
+      <div class="report-title-badge"><i class="fa-solid fa-calculator"></i> ${stageLabel}對帳報告</div>
+      <div class="report-date"><i class="fa-regular fa-clock"></i> 產生日期：${new Date().toLocaleDateString('zh-TW')}</div>
+    </div>
+
+    <!-- 財務概況 4 大指標小卡 -->
+    <div class="report-metrics-grid">
+      <div class="r-metric-box">
+        <span>當期累積支出</span>
+        <strong>${formatCurrency(db.summary.totalExpense)}</strong>
+      </div>
+      <div class="r-metric-box">
+        <span>當期累積收益</span>
+        <strong style="color:var(--sage-green);">${formatCurrency(db.summary.totalIncome)}</strong>
+      </div>
+      <div class="r-metric-box">
+        <span>淨投入成本</span>
+        <strong style="color:var(--accent-rose);">${formatCurrency(db.summary.netCost)}</strong>
+      </div>
+      <div class="r-metric-box">
+        <span>共同帳戶餘額</span>
+        <strong style="color:var(--primary);">${formatCurrency(db.summary.jointCash)}</strong>
+      </div>
+    </div>
+
+    <!-- 雙方帳目對照表 -->
+    <div class="report-partners-comparison">
+      <div class="r-partner-card">
+        <div class="r-partner-name">Joanna (Partner A)</div>
+        <div class="r-partner-actual-out">
+          <span>實際出資總額</span>
+          <strong>${formatCurrency(db.partners.A.actualOut)}</strong>
+        </div>
+        <div class="r-detail-row"><span>實際代墊支出：</span><strong>${formatCurrency(db.partners.A.paid)}</strong></div>
+        <div class="r-detail-row"><span>應分攤 (50%) 支出：</span><strong>${formatCurrency(db.partners.A.shouldPay)}</strong></div>
+        <div class="r-detail-row"><span>合夥人沖帳過帳：</span><strong>${formatCurrency(db.partners.A.reconPaid)}</strong></div>
+        <div class="r-detail-row"><span>預存共同帳戶：</span><strong>${formatCurrency(db.partners.A.deposit)}</strong></div>
+        <div class="r-detail-row"><span>從共同帳戶借支：</span><strong>${formatCurrency(db.partners.A.borrow)}</strong></div>
+      </div>
+
+      <div class="r-partner-card">
+        <div class="r-partner-name">Elaine (Partner B)</div>
+        <div class="r-partner-actual-out">
+          <span>實際出資總額</span>
+          <strong>${formatCurrency(db.partners.B.actualOut)}</strong>
+        </div>
+        <div class="r-detail-row"><span>實際代墊支出：</span><strong>${formatCurrency(db.partners.B.paid)}</strong></div>
+        <div class="r-detail-row"><span>應分攤 (50%) 支出：</span><strong>${formatCurrency(db.partners.B.shouldPay)}</strong></div>
+        <div class="r-detail-row"><span>合夥人沖帳過帳：</span><strong>${formatCurrency(db.partners.B.reconPaid)}</strong></div>
+        <div class="r-detail-row"><span>預存共同帳戶：</span><strong>${formatCurrency(db.partners.B.deposit)}</strong></div>
+        <div class="r-detail-row"><span>從共同帳戶借支：</span><strong>${formatCurrency(db.partners.B.borrow)}</strong></div>
+      </div>
+    </div>
+
+    <!-- 最終對帳結果 -->
+    <div class="report-verdict-box">
+      <div class="verdict-label">最終對帳結算</div>
+      <div class="verdict-content">${verdictBadge}</div>
+    </div>
+  `;
+
+  modal.classList.add("open");
+}
+
+// 複製格式化 LINE 結算訊息至剪貼簿
+function copyLineSettlementMessage() {
+  const stageFilterEl = document.getElementById("dashboard-stage-filter");
+  const stage = stageFilterEl ? stageFilterEl.value : "all";
+  const db = calculateFilteredDashboard(stage);
+  if (!db) return;
+
+  const stageLabel = stage === "all" ? "全期間總計" : stage;
+  const formatCurrency = (val) => "$" + Math.round(parseFloat(val) || 0).toLocaleString();
+
+  let settlementText = "";
+  if (db.settlement.whosAdvancing === "A") {
+    settlementText = `👉 Elaine 需轉帳給 Joanna：${formatCurrency(db.settlement.amount)}`;
+  } else if (db.settlement.whosAdvancing === "B") {
+    settlementText = `👉 Joanna 需轉帳給 Elaine：${formatCurrency(db.settlement.amount)}`;
+  } else {
+    settlementText = `👉 雙方帳目對等，無須轉帳結算！`;
+  }
+
+  const lineMsg = `🏠 【IFMS 房產投資合夥結算通知】 (${stageLabel})
+📅 結算日期：${new Date().toLocaleDateString('zh-TW')}
+
+💰 財務總覽：
+- 累積支出：${formatCurrency(db.summary.totalExpense)}
+- 累積收益：${formatCurrency(db.summary.totalIncome)}
+- 共同帳戶餘額：${formatCurrency(db.summary.jointCash)}
+
+👤 Joanna (A)：
+- 實際出資總額：${formatCurrency(db.partners.A.actualOut)}
+- 實際代墊支出：${formatCurrency(db.partners.A.paid)}
+- 應分攤(50%)支出：${formatCurrency(db.partners.A.shouldPay)}
+
+👤 Elaine (B)：
+- 實際出資總額：${formatCurrency(db.partners.B.actualOut)}
+- 實際代墊支出：${formatCurrency(db.partners.B.paid)}
+- 應分攤(50%)支出：${formatCurrency(db.partners.B.shouldPay)}
+
+-------------------------
+📌 結算結果：
+${settlementText}
+
+(備註：詳細明細可登入 IFMS 財務系統對帳)`;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(lineMsg).then(() => {
+      alert("✅ 已成功複製 LINE 結算訊息至剪貼簿！可直接貼上傳送至 LINE 群組。");
+    }).catch(() => {
+      alert("複製失敗，請手動選取對帳單內容。");
+    });
+  } else {
+    alert("您的瀏覽器不支援自動複製功能，請選取對帳單文字手動複製。");
+  }
 }
 
 // 分頁切換函式
@@ -695,11 +1001,61 @@ function applyFilters() {
   renderTransactions(filtered);
 }
 
-// 放大檢視收據圖片
+// 放大檢視收據圖片與檔案
 function openImageViewer(url) {
+  if (!url) return;
   const modal = document.getElementById("image-viewer-modal");
   const img = document.getElementById("viewer-img");
-  img.src = url;
+  let iframe = document.getElementById("viewer-iframe");
+  let externalBtn = document.getElementById("viewer-external-link");
+
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.id = "viewer-iframe";
+    iframe.className = "viewer-content-iframe";
+    modal.appendChild(iframe);
+  }
+
+  if (!externalBtn) {
+    externalBtn = document.createElement("a");
+    externalBtn.id = "viewer-external-link";
+    externalBtn.className = "btn-external-link";
+    externalBtn.target = "_blank";
+    externalBtn.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square"></i> 在新分頁開啟原始檔案';
+    modal.appendChild(externalBtn);
+  }
+
+  // 判斷是否包含 Google Drive File ID
+  let driveId = null;
+  const match = url.match(/[?&]id=([^&]+)/) || url.match(/\/d\/([^/]+)/);
+  if (match && match[1]) {
+    driveId = match[1];
+  }
+
+  if (driveId) {
+    // 使用 Google Drive 官方內嵌預覽 iframe (避免熱鏈封鎖)
+    img.style.display = "none";
+    iframe.style.display = "block";
+    iframe.src = `https://drive.google.com/file/d/${driveId}/preview`;
+    externalBtn.href = `https://drive.google.com/file/d/${driveId}/view`;
+    externalBtn.style.display = "inline-flex";
+  } else if (url.startsWith("data:image") || url.match(/\.(png|jpg|jpeg|gif|webp|svg)$/i)) {
+    // 直連圖片或 Base64 預覽
+    iframe.style.display = "none";
+    iframe.src = "";
+    img.style.display = "block";
+    img.src = url;
+    externalBtn.href = url;
+    externalBtn.style.display = "inline-flex";
+  } else {
+    // 一般外部連結
+    img.style.display = "none";
+    iframe.style.display = "block";
+    iframe.src = url;
+    externalBtn.href = url;
+    externalBtn.style.display = "inline-flex";
+  }
+
   modal.classList.add("open");
 }
 
@@ -827,8 +1183,8 @@ function renderLoanSummary() {
         <strong style="color: var(--accent-rose-hover);">${formatCurrency(summary.remainingPrincipal)}</strong>
       </div>
       <div class="loan-metric-item">
-        <span>當前年利率 / 寬限期</span>
-        <strong>${summary.interestRate * 100}% (${summary.graceMonths}個月)</strong>
+        <span>當前年利率 / 寬限期(${summary.graceMonths || 12}個月)</span>
+        <strong>${summary.interestRate * 100}%</strong>
       </div>
       <div class="loan-metric-item">
         <span>還款進度</span>
@@ -1129,16 +1485,17 @@ function exportHTMLReport() {
 
   <h2>一、 財務指標總覽</h2>
   <div class="metrics-grid">
-    <div class="metric-card"><span>累積投入總支出</span><h3>${formatCurrency(db.summary.totalExpense)}</h3></div>
-    <div class="metric-card"><span>累積租金/其他收入</span><h3>${formatCurrency(db.summary.totalIncome)}</h3></div>
-    <div class="metric-card"><span>房產淨投入成本</span><h3>${formatCurrency(db.summary.netCost)}</h3></div>
-    <div class="metric-card"><span>華南共同帳戶餘額</span><h3>${formatCurrency(db.summary.jointCash)}</h3></div>
+    <div class="metric-card"><span>累積投入總支出</span><h3>${formatCurrency(db.summary.totalExpense)}</h3><small style="color:#64748b;font-size:0.75rem;">(A 代墊 + B 代墊 + 共同帳戶支出)</small></div>
+    <div class="metric-card"><span>累積租金/其他收入</span><h3>${formatCurrency(db.summary.totalIncome)}</h3><small style="color:#64748b;font-size:0.75rem;">(所有標記為收入的金額加總)</small></div>
+    <div class="metric-card"><span>房產淨投入成本</span><h3>${formatCurrency(db.summary.netCost)}</h3><small style="color:#64748b;font-size:0.75rem;">(累積總支出 - 累積總收益)</small></div>
+    <div class="metric-card"><span>華南共同帳戶餘額</span><h3>${formatCurrency(db.summary.jointCash)}</h3><small style="color:#64748b;font-size:0.75rem;">(預存存入 + 收益 - 支出 - 借支)</small></div>
   </div>
 
   <h2>二、 雙方結算對帳單</h2>
   <div class="partners-grid">
     <div class="partner-card">
       <h3>Joanna 對帳單</h3>
+      <div class="p-row" style="background:#e0e7ff; padding: 6px 10px; border-radius:6px; margin-bottom: 8px;"><span>實際出資總額：</span><strong style="color:#2563eb; font-size:1.05rem;">${formatCurrency(db.partners.A.actualOut)}</strong></div>
       <div class="p-row"><span>實際支出代墊：</span><strong>${formatCurrency(db.partners.A.paid)}</strong></div>
       <div class="p-row"><span>應分攤支出：</span><strong>${formatCurrency(db.partners.A.shouldPay)}</strong></div>
       <div class="p-row"><span>實際收到收入：</span><strong>${formatCurrency(db.partners.A.received)}</strong></div>
@@ -1150,6 +1507,7 @@ function exportHTMLReport() {
     </div>
     <div class="partner-card">
       <h3>Elaine 對帳單</h3>
+      <div class="p-row" style="background:#e0e7ff; padding: 6px 10px; border-radius:6px; margin-bottom: 8px;"><span>實際出資總額：</span><strong style="color:#2563eb; font-size:1.05rem;">${formatCurrency(db.partners.B.actualOut)}</strong></div>
       <div class="p-row"><span>實際支出代墊：</span><strong>${formatCurrency(db.partners.B.paid)}</strong></div>
       <div class="p-row"><span>應分攤支出：</span><strong>${formatCurrency(db.partners.B.shouldPay)}</strong></div>
       <div class="p-row"><span>實際收到收入：</span><strong>${formatCurrency(db.partners.B.received)}</strong></div>
