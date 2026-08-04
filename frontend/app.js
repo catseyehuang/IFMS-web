@@ -71,13 +71,42 @@ function checkExistingSession() {
   }
 }
 
-// 載入 Google GIS 函式庫
+// 載入與初始化 Google GIS SDK
 function initGoogleLibrary() {
-  // 動態更新 HTML 元素中的 Client ID
-  const onloadEl = document.getElementById("g_id_onload");
-  if (onloadEl && typeof CONFIG !== "undefined" && CONFIG.GOOGLE_CLIENT_ID && !CONFIG.GOOGLE_CLIENT_ID.startsWith("YOUR_")) {
-    onloadEl.setAttribute("data-client_id", CONFIG.GOOGLE_CLIENT_ID);
+  if (typeof CONFIG === "undefined" || !CONFIG.GOOGLE_CLIENT_ID || CONFIG.GOOGLE_CLIENT_ID.startsWith("YOUR_")) {
+    console.warn("未設定有效的 GOOGLE_CLIENT_ID，無法初始化 Google 登入按鈕");
+    return;
   }
+
+  function renderBtn() {
+    if (window.google && google.accounts && google.accounts.id) {
+      google.accounts.id.initialize({
+        client_id: CONFIG.GOOGLE_CLIENT_ID,
+        callback: window.handleCredentialResponse,
+        auto_select: false,
+        itp_support: true
+      });
+
+      const wrapper = document.getElementById("google-login-btn-wrapper");
+      if (wrapper) {
+        wrapper.innerHTML = "";
+        const btnContainer = document.createElement("div");
+        wrapper.appendChild(btnContainer);
+        google.accounts.id.renderButton(btnContainer, {
+          type: "standard",
+          shape: "pill",
+          theme: "filled_blue",
+          text: "signin_with",
+          size: "large",
+          logo_alignment: "left"
+        });
+      }
+    } else {
+      setTimeout(renderBtn, 100);
+    }
+  }
+
+  renderBtn();
 }
 
 // Google 登入回呼函式 (全域作用域)
