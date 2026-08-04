@@ -6,11 +6,32 @@ const SPREADSHEET_ID = typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.g
 // --- API 入口 ---
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({
-    status: "ok",
-    message: "IFMS Apps Script API is running.",
-    timestamp: new Date().toISOString()
-  })).setMimeType(ContentService.MimeType.JSON);
+  try {
+    let requestData = null;
+    if (e && e.parameter) {
+      if (e.parameter.payload) {
+        requestData = JSON.parse(e.parameter.payload);
+      } else if (e.parameter.action) {
+        requestData = {
+          action: e.parameter.action,
+          idToken: e.parameter.idToken,
+          data: e.parameter.data ? JSON.parse(e.parameter.data) : null
+        };
+      }
+    }
+
+    if (requestData && requestData.action) {
+      return handleRequest(requestData);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "ok",
+      message: "IFMS Apps Script API is running.",
+      timestamp: new Date().toISOString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return errorResponse("doGet Error: " + err.toString());
+  }
 }
 
 function doPost(e) {
@@ -26,66 +47,69 @@ function doPost(e) {
       return errorResponse("無效 JSON 格式：" + parseErr.message);
     }
 
-    const action = requestData.action;
-    const idToken = requestData.idToken;
-
-    // 1. 驗證 Google ID Token 與白名單
-    const userEmail = verifyToken(idToken);
-    if (!userEmail) {
-      return errorResponse("驗證失敗，存取遭拒。");
-    }
-
-    // 2. 根據 action 路由
-    let result;
-    switch (action) {
-      case "getDashboard":
-        result = getDashboardData();
-        break;
-      case "getTransactions":
-        result = getTransactionsList();
-        break;
-      case "addTransaction":
-        result = addTransactionItem(requestData.data, userEmail);
-        break;
-      case "updateTransaction":
-        result = updateTransactionItem(requestData.data, userEmail);
-        break;
-      case "deleteAttachment":
-        result = deleteTransactionAttachment(requestData.data ? requestData.data.transactionId : null);
-        break;
-      case "uploadAttachment":
-        result = uploadAttachmentFile(requestData.data, userEmail);
-        break;
-      case "getContracts":
-        result = getContractsList();
-        break;
-      case "addContract":
-        result = addContractItem(requestData.data, userEmail);
-        break;
-      case "deleteContract":
-        result = deleteContractItem(requestData.data ? requestData.data.id : null);
-        break;
-      case "getLoanSummary":
-        result = getLoanSummaryData();
-        break;
-      case "getCashFlowForecast":
-        result = getCashFlowForecastData();
-        break;
-      case "getLoanSchedule":
-        result = getLoanScheduleItems(requestData.data ? requestData.data.contractId : null);
-        break;
-      case "updateLoanPeriod":
-        result = updateLoanPeriodItem(requestData.data);
-        break;
-      default:
-        return errorResponse(`未知的操作指令 (${action})。請確認後端已部署包含此指令的最新版 code.js。`);
-    }
-
-    return successResponse(result);
-
+    return handleRequest(requestData);
   } catch (error) {
     return errorResponse("後端執行錯誤: " + error.toString());
   }
+}
+
+function handleRequest(requestData) {
+  const action = requestData.action;
+  const idToken = requestData.idToken;
+
+  // 1. 驗證 Google ID Token 與白名單
+  const userEmail = verifyToken(idToken);
+  if (!userEmail) {
+    return errorResponse("驗證失敗，存取遭拒。");
+  }
+
+  // 2. 根據 action 路由
+  let result;
+  switch (action) {
+    case "getDashboard":
+      result = getDashboardData();
+      break;
+    case "getTransactions":
+      result = getTransactionsList();
+      break;
+    case "addTransaction":
+      result = addTransactionItem(requestData.data, userEmail);
+      break;
+    case "updateTransaction":
+      result = updateTransactionItem(requestData.data, userEmail);
+      break;
+    case "deleteAttachment":
+      result = deleteTransactionAttachment(requestData.data ? requestData.data.transactionId : null);
+      break;
+    case "uploadAttachment":
+      result = uploadAttachmentFile(requestData.data, userEmail);
+      break;
+    case "getContracts":
+      result = getContractsList();
+      break;
+    case "addContract":
+      result = addContractItem(requestData.data, userEmail);
+      break;
+    case "deleteContract":
+      result = deleteContractItem(requestData.data ? requestData.data.id : null);
+      break;
+    case "getLoanSummary":
+      result = getLoanSummaryData();
+      break;
+    case "getCashFlowForecast":
+      result = getCashFlowForecastData();
+      break;
+    case "getLoanSchedule":
+      result = getLoanScheduleItems(requestData.data ? requestData.data.contractId : null);
+      break;
+    case "updateLoanPeriod":
+      result = updateLoanPeriodItem(requestData.data);
+      break;
+    default:
+      return errorResponse(`未知的操作指令 (${action})。請確認後端已部署包含此指令的最新版 code.js。`);
+  }
+
+  return successResponse(result);
 }
 
 // --- 輔助函式：回應格式 ---
@@ -632,8 +656,12 @@ function generateLoanScheduleItems(contractId, amount, interestRate, termMonths,
 
   const rows = [];
   for (let p = 1; p <= termMonths; p++) {
-    // 計算該期繳款日
-    const targetDate = new Date(startYear, startMonth + p - 1, payDay);
+    // 計算該期繳款日：第一期 (p=1) 應該為撥款日之次月 (startMonth + p)
+    const targetMonth = startMonth + p;
+    const tempDate = new Date(startYear, targetMonth, 1);
+    const maxDaysInMonth = new Date(tempDate.getFullYear(), tempDate.getMonth() + 1, 0).getDate();
+    const actualDay = Math.min(payDay || startD.getDate(), maxDaysInMonth);
+    const targetDate = new Date(tempDate.getFullYear(), tempDate.getMonth(), actualDay);
     const dateStr = formatDate(targetDate);
     
     let monthlyPayment = 0;

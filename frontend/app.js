@@ -1,7 +1,6 @@
 // 房產投資合夥財務管理系統 (IFMS) - 前端核心邏輯
 
 // --- 設定檔讀取 (預設從 config.js 載入) ---
-// 若 config.js 未建立，此處提供安全備用結構
 if (typeof CONFIG === "undefined") {
   window.CONFIG = {
     GOOGLE_CLIENT_ID: "YOUR_GOOGLE_CLIENT_ID",
@@ -134,9 +133,16 @@ async function callAPI(action, data = null, options = {}) {
       throw new Error(`無效的 JSON 回應: ${responseText.slice(0, 100)}`);
     }
 
-    // 檢查是否誤中 doGet (HTTP 302 將 POST 轉為 GET 時)
+    // 檢查是否誤中 doGet (HTTP 302 將 POST 轉為 GET 時)，若觸發則自動改以 GET 帶 payload 重試
     if (result.status === "ok" && result.message) {
-      throw new Error(`API 請求被轉換為 GET 請求 (${result.message})。請重新發布/更新 Apps Script 部署。`);
+      const getUrl = `${CONFIG.GAS_API_URL}?payload=${encodeURIComponent(JSON.stringify(payload))}`;
+      const getResponse = await fetch(getUrl, { method: "GET", redirect: "follow" });
+      const getResponseText = await getResponse.text();
+      try {
+        result = JSON.parse(getResponseText);
+      } catch (e) {
+        throw new Error(`GET 備用請求回應格式無法解析: ${getResponseText.slice(0, 80)}`);
+      }
     }
 
     if (result.success) {
