@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>房產投資合夥財務管理系統 (IFMS)</title>
+  <!-- Google Fonts: Plus Jakarta Sans / Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+  <!-- FontAwesome for Premium Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="index.css">
+  <!-- Google Identity Services SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+
+<body>
+
+  <!-- 載入動畫 -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- 登入畫面 -->
+  <div id="login-container" class="login-container">
+    <div class="login-card">
+      <div class="logo-area">
+        <i class="fa-solid fa-house-laptop logo-icon"></i>
+        <h1>IFMS</h1>
+        <p>房產投資合夥財務管理系統</p>
+      </div>
+      <div class="login-info">
+        <p>請使用經授權的 Google 帳戶登入以存取系統</p>
+      </div>
+      <div id="google-login-btn-wrapper">
+        <div id="g_id_onload" data-client_id="YOUR_GOOGLE_CLIENT_ID" data-context="signin" data-ux_mode="popup"
+          data-callback="handleCredentialResponse" data-auto_select="false" data-itp_support="true">
+        </div>
+        <div class="g_id_signin" data-type="standard" data-shape="pill" data-theme="filled_blue" data-text="signin_with"
+          data-size="large" data-logo_alignment="left">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主畫面 (登入後顯示) -->
+  <div id="app-container" class="app-container hidden">
+    <!-- 頂部導覽列 -->
+    <header class="main-header">
+      <div class="header-logo">
+        <i class="fa-solid fa-house-circle-check"></i>
+        <span>IFMS <small>v2.0</small></span>
+      </div>
+      <!-- 桌上型導覽列 (電腦版顯示在頂部) -->
+      <nav class="desktop-nav">
+        <button class="nav-btn active" data-tab="dashboard">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>儀表板</span>
+        </button>
+        <button class="nav-btn" data-tab="transactions">
+          <i class="fa-solid fa-list-check"></i>
+          <span>流水帳</span>
+        </button>
+        <button class="nav-btn" data-tab="contracts">
+          <i class="fa-solid fa-file-contract"></i>
+          <span>合約管理</span>
+        </button>
+        <button class="nav-btn" data-tab="settings">
+          <i class="fa-solid fa-gear"></i>
+          <span>系統設定</span>
+        </button>
+      </nav>
+      <div class="header-user">
+        <span id="user-display-name">使用者名稱</span>
+        <button id="logout-btn" class="btn-logout" title="登出">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- 手機版固定底部導覽列 (Sticky Bottom Bar) -->
+    <nav class="mobile-bottom-nav">
+      <button class="nav-btn active" data-tab="dashboard">
+        <i class="fa-solid fa-chart-pie"></i>
+        <span>儀表板</span>
+      </button>
+      <button class="nav-btn" data-tab="transactions">
+        <i class="fa-solid fa-list-check"></i>
+        <span>流水帳</span>
+      </button>
+      <button class="nav-btn" data-tab="contracts">
+        <i class="fa-solid fa-file-contract"></i>
+        <span>合約管理</span>
+      </button>
+      <button class="nav-btn" data-tab="settings">
+        <i class="fa-solid fa-gear"></i>
+        <span>設定</span>
+      </button>
+    </nav>
+
+    <div class="main-layout">
+      <!-- 1. 儀表板 (Dashboard Tab) -->
+      <div id="tab-dashboard" class="tab-content active">
+        <section class="dashboard-section">
+          <!-- 結算狀態看板 (最顯眼) -->
+          <div class="settlement-banner card">
+            <div class="settlement-info">
+              <span class="label">當前結算狀態</span>
+              <h2 id="settlement-status-text">載入中...</h2>
+            </div>
+            <div class="settlement-visual">
+              <div id="settlement-bar-container" class="settlement-bar-container">
+                <div class="bar-labels">
+                  <span>Joanna</span>
+                  <span>Elaine</span>
+                </div>
+                <div class="progress-track">
+                  <div id="settlement-progress-bar" class="progress-fill"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 數據指標卡片 -->
+          <div class="metrics-grid">
+            <div class="metric-card card">
+              <div class="metric-icon expense-icon">
+                <i class="fa-solid fa-wallet"></i>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">累積投入總支出</span>
+                <h3 id="metric-total-expense">$0</h3>
+              </div>
+            </div>
+
+            <div class="metric-card card">
+              <div class="metric-icon income-icon">
+                <i class="fa-solid fa-hand-holding-dollar"></i>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">累積租金/其他收入</span>
+                <h3 id="metric-total-income">$0</h3>
+              </div>
+            </div>
+
+            <div class="metric-card card">
+              <div class="metric-icon net-icon">
+                <i class="fa-solid fa-coins"></i>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">房產淨投入成本</span>
+                <h3 id="metric-net-cost">$0</h3>
+              </div>
+            </div>
+
+            <div class="metric-card card">
+              <div class="metric-icon joint-icon">
+                <i class="fa-solid fa-building-columns"></i>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">華南共同帳戶餘額</span>
+                <h3 id="metric-joint-cash">$0</h3>
+              </div>
+            </div>
+          </div>
+
+          <!-- 雙方財務詳情卡片 -->
+          <div class="partners-grid">
+            <div class="partner-card card">
+              <h4>Joanna</h4>
+              <div class="p-details">
+                <div class="p-row"><span>實際支出代墊：</span><strong id="partner-a-paid">$0</strong></div>
+                <div class="p-row"><span>應分攤支出：</span><strong id="partner-a-should-pay">$0</strong></div>
+                <div class="p-row"><span>實際收到收入：</span><strong id="partner-a-received">$0</strong></div>
+                <div class="p-row"><span>應分攤收入：</span><strong id="partner-a-should-get">$0</strong></div>
+                <div class="p-row"><span>合夥人沖帳額：</span><strong id="partner-a-recon">$0</strong></div>
+                <div class="p-row"><span>預存共同帳戶：</span><strong id="partner-a-deposit">$0</strong></div>
+                <div class="p-row"><span>共同帳戶借支：</span><strong id="partner-a-borrow">$0</strong></div>
+                <hr>
+                <div class="p-row total-row"><span>代墊淨額：</span><span id="partner-a-advance" class="advance-status">$0</span></div>
+              </div>
+            </div>
+
+            <div class="partner-card card">
+              <h4>Elaine</h4>
+              <div class="p-details">
+                <div class="p-row"><span>實際支出代墊：</span><strong id="partner-b-paid">$0</strong></div>
+                <div class="p-row"><span>應分攤支出：</span><strong id="partner-b-should-pay">$0</strong></div>
+                <div class="p-row"><span>實際收到收入：</span><strong id="partner-b-received">$0</strong></div>
+                <div class="p-row"><span>應分攤收入：</span><strong id="partner-b-should-get">$0</strong></div>
+                <div class="p-row"><span>合夥人沖帳額：</span><strong id="partner-b-recon">$0</strong></div>
+                <div class="p-row"><span>預存共同帳戶：</span><strong id="partner-b-deposit">$0</strong></div>
+                <div class="p-row"><span>共同帳戶借支：</span><strong id="partner-b-borrow">$0</strong></div>
+                <hr>
+                <div class="p-row total-row"><span>代墊淨額：</span><span id="partner-b-advance" class="advance-status">$0</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 房貸概況與 6 個月現金流預測區塊 -->
+          <div class="analytics-grid">
+            <!-- 房貸資訊卡片 -->
+            <div class="loan-summary-card card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-landmark"></i> 房貸還款概況</h3>
+                <span id="loan-status-badge" class="badge">無房貸合約</span>
+              </div>
+              <div id="loan-summary-body" class="loan-summary-body">
+                <p class="text-muted">尚未登記生效的房貸合約，可至「合約管理」分頁進行登記。</p>
+              </div>
+            </div>
+
+            <!-- 現金流預測卡片 -->
+            <div class="cashflow-forecast-card card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-chart-simple"></i> 未來 6 個月現金流預測</h3>
+                <span class="sub-text">以房貸攤還與租約計算</span>
+              </div>
+              <div id="cashflow-chart-container" class="cashflow-chart-container">
+                <!-- 動態生成 6 個月柱狀圖 -->
+                <div class="text-center text-muted" style="padding: 20px;">載入現金流預測中...</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 2. 流水帳 (Transactions Tab) -->
+      <div id="tab-transactions" class="tab-content">
+        <section class="transactions-section">
+          <div class="section-header">
+            <h2><i class="fa-solid fa-list-check"></i> 收支流水帳</h2>
+            <div class="header-actions">
+              <button id="export-report-btn" class="btn-secondary">
+                <i class="fa-solid fa-file-export"></i> 匯出結算報表 (HTML)
+              </button>
+              <button id="open-add-modal-btn" class="btn-primary">
+                <i class="fa-solid fa-plus"></i> 新增交易紀錄
+              </button>
+            </div>
+          </div>
+
+          <!-- 篩選列 -->
+          <div class="filter-bar card">
+            <div class="filter-group">
+              <label for="filter-stage">期別</label>
+              <select id="filter-stage">
+                <option value="all">全部期別</option>
+                <option value="前期">前期 (預售)</option>
+                <option value="中期">中期 (持有)</option>
+                <option value="後期">後期 (售出)</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="filter-type">交易類型</label>
+              <select id="filter-type">
+                <option value="all">全部類型</option>
+                <option value="支出">支出 (Expense)</option>
+                <option value="收入">收入 (Income)</option>
+                <option value="沖帳">沖帳 (Reconciliation)</option>
+                <option value="存入共同帳戶">存入共同帳戶</option>
+                <option value="從共同帳戶借支">從共同帳戶借支</option>
+              </select>
+            </div>
+
+            <div class="filter-group search-group">
+              <label for="search-desc">搜尋備註/類別</label>
+              <input type="text" id="search-desc" placeholder="請輸入關鍵字...">
+            </div>
+          </div>
+
+          <!-- 交易列表 -->
+          <div class="transactions-table-wrapper card">
+            <table class="transactions-table">
+              <thead>
+                <tr>
+                  <th>交易日期</th>
+                  <th>類型</th>
+                  <th>期別</th>
+                  <th>費用類別</th>
+                  <th>經手人</th>
+                  <th>金額</th>
+                  <th>備註</th>
+                  <th>收據/附件</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="transactions-list-body">
+                <tr>
+                  <td colspan="9" class="text-center">請先登入系統載入資料</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- 3. 合約管理 (Contracts Tab) -->
+      <div id="tab-contracts" class="tab-content">
+        <section class="contracts-section">
+          <div class="section-header">
+            <h2><i class="fa-solid fa-file-contract"></i> 房貸與租賃合約管理</h2>
+            <button id="open-contract-modal-btn" class="btn-primary">
+              <i class="fa-solid fa-plus"></i> 新增合約紀錄
+            </button>
+          </div>
+
+          <!-- 合約卡片列表 -->
+          <div id="contracts-grid" class="contracts-grid">
+            <div class="card text-center text-muted" style="grid-column: 1/-1; padding: 40px;">
+              載入合約資料中...
+            </div>
+          </div>
+
+          <!-- 貸款攤還表檢視區 (選取特定房貸時展開) -->
+          <div id="loan-schedule-section" class="loan-schedule-section card hidden">
+            <div class="section-header">
+              <h3 id="schedule-title"><i class="fa-solid fa-calendar-days"></i> 房貸攤還明細表</h3>
+              <div class="schedule-actions">
+                <span id="schedule-summary-tag" class="stage-tag">360 期</span>
+              </div>
+            </div>
+            <div class="transactions-table-wrapper">
+              <table class="transactions-table">
+                <thead>
+                  <tr>
+                    <th>期數</th>
+                    <th>預計繳款日</th>
+                    <th>本息合計</th>
+                    <th>償還本金</th>
+                    <th>支付利息</th>
+                    <th>剩餘本金</th>
+                    <th>狀態</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="loan-schedule-body">
+                  <tr>
+                    <td colspan="8" class="text-center">點擊上方合約「查看攤還表」載入明細</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 4. 系統設定 (Settings Tab) -->
+      <div id="tab-settings" class="tab-content">
+        <section class="settings-section">
+          <div class="section-header">
+            <h2><i class="fa-solid fa-gear"></i> 系統設定與維護</h2>
+          </div>
+
+          <div class="settings-grid">
+            <div class="card">
+              <h3><i class="fa-solid fa-user-shield"></i> 目前登入資訊</h3>
+              <div class="p-details" style="margin-top: 15px;">
+                <div class="p-row"><span>使用者 Email：</span><strong id="settings-user-email">-</strong></div>
+                <div class="p-row"><span>系統權限：</span><strong id="settings-user-role">管理員 (Admin)</strong></div>
+                <div class="p-row"><span>系統版本：</span><strong>IFMS v2.0 (Phase 2)</strong></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3><i class="fa-solid fa-cloud-arrow-up"></i> GitHub Pages 外網部署指引</h3>
+              <p class="text-muted" style="margin-top: 10px; font-size: 0.9rem; line-height: 1.6;">
+                如欲讓合夥人在外網隨時使用手機開啟本系統，請將專案中的 <code>/frontend</code> 資料夾推送到 GitHub 並開啟 GitHub Pages：
+              </p>
+              <ol style="margin-top: 10px; margin-left: 20px; font-size: 0.85rem; color: var(--text-card-main); line-height: 1.8;">
+                <li>建立一個 GitHub Repository (如 <code>IFMS-web</code>) 並上傳前端檔案。</li>
+                <li>於 GitHub 設定中啟動 <strong>GitHub Pages</strong> 發佈。</li>
+                <li>複製發佈的網址 (如 <code>https://username.github.io/IFMS-web/</code>)。</li>
+                <li>前往 Google Cloud Console 將該網址加入「已授權的 JavaScript 來源」。</li>
+              </ol>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增交易 Modal -->
+  <div id="add-modal" class="modal">
+    <div class="modal-content card">
+      <div class="modal-header">
+        <h3 id="modal-title-text"><i class="fa-solid fa-file-invoice-dollar"></i> 新增交易紀錄</h3>
+        <button id="close-modal-btn" class="btn-close">&times;</button>
+      </div>
+      <form id="add-transaction-form">
+        <input type="hidden" id="tx-id" value="">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="tx-date">交易日期 <span class="required">*</span></label>
+            <input type="date" id="tx-date" required>
+          </div>
+
+          <div class="form-group">
+            <label for="tx-type">交易類型 <span class="required">*</span></label>
+            <select id="tx-type" required>
+              <option value="支出">支出 (Expense)</option>
+              <option value="收入">收入 (Income)</option>
+              <option value="沖帳">沖帳 (Reconciliation)</option>
+              <option value="存入共同帳戶">存入共同帳戶</option>
+              <option value="從共同帳戶借支">從共同帳戶借支</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label id="payer-label" for="tx-payer">付款人 <span class="required">*</span></label>
+            <select id="tx-payer" required>
+              <option value="A">Joanna</option>
+              <option value="B">Elaine</option>
+              <option value="共同帳戶">共同帳戶</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="tx-amount">金額 <span class="required">*</span></label>
+            <input type="number" id="tx-amount" min="1" step="any" required placeholder="請輸入金額">
+          </div>
+
+          <div class="form-group">
+            <label for="tx-stage">期別 <span class="required">*</span></label>
+            <select id="tx-stage" required>
+              <option value="前期">前期 (預售)</option>
+              <option value="中期" selected>中期 (持有)</option>
+              <option value="後期">後期 (售出)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="tx-category">費用類別 <span class="required">*</span></label>
+            <select id="tx-category" required>
+              <!-- 動態生成或預設分類 -->
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="tx-desc">備註說明</label>
+          <textarea id="tx-desc" rows="3" placeholder="請填寫此筆交易的相關說明或明細..."></textarea>
+        </div>
+
+        <!-- 檔案上傳區 -->
+        <div class="form-group full-width">
+          <label>上傳收據/單據圖片 (可選)</label>
+          <div id="drag-drop-area" class="drag-drop-area">
+            <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+            <p>將圖片拖曳至此處，或 <span>點擊選取檔案</span></p>
+            <input type="file" id="tx-file" accept="image/*" class="hidden">
+          </div>
+          <!-- 既存附件區 (編輯時顯示) -->
+          <div id="existing-attachment-area" class="existing-attachment-area hidden">
+            <p>目前已有收據附件：</p>
+            <div class="existing-att-box">
+              <i class="fa-solid fa-receipt"></i>
+              <span id="existing-file-name">receipt.jpg</span>
+              <button type="button" id="delete-existing-att-btn" class="btn-delete-att">刪除現有附件</button>
+            </div>
+          </div>
+          <div id="file-preview-container" class="file-preview-container hidden">
+            <img id="file-preview-img" src="" alt="預覽圖">
+            <span id="remove-file-btn" class="remove-file-btn">&times;</span>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="cancel-modal-btn" class="btn-secondary">取消</button>
+          <button type="submit" class="btn-primary">確認儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 新增合約 Modal -->
+  <div id="add-contract-modal" class="modal">
+    <div class="modal-content card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-signature"></i> 新增合約紀錄</h3>
+        <button id="close-contract-modal-btn" class="btn-close">&times;</button>
+      </div>
+      <form id="add-contract-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="con-type">合約類型 <span class="required">*</span></label>
+            <select id="con-type" required>
+              <option value="房貸">房貸 (Mortgage Loan)</option>
+              <option value="租約">租約 (Lease Contract)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="con-name">合約名稱 <span class="required">*</span></label>
+            <input type="text" id="con-name" required placeholder="例：華南銀行 30年房貸 / 10F 租約">
+          </div>
+
+          <div class="form-group">
+            <label id="con-amount-label" for="con-amount">貸款總額 / 月租金 <span class="required">*</span></label>
+            <input type="number" id="con-amount" min="1" step="any" required placeholder="例：9170000">
+          </div>
+
+          <div class="form-group">
+            <label for="con-start-date">生效/撥款日期 <span class="required">*</span></label>
+            <input type="date" id="con-start-date" required>
+          </div>
+
+          <div class="form-group">
+            <label for="con-pay-day">每月繳款/收租日 <span class="required">*</span></label>
+            <input type="number" id="con-pay-day" min="1" max="31" value="15" required placeholder="1-31">
+          </div>
+
+          <!-- 房貸專用欄位 -->
+          <div class="form-group loan-field">
+            <label for="con-rate">年利率 (%) <span class="required">*</span></label>
+            <input type="number" id="con-rate" step="0.001" min="0" value="2.5" placeholder="例：2.5">
+          </div>
+
+          <div class="form-group loan-field">
+            <label for="con-term">總期限 (月數) <span class="required">*</span></label>
+            <input type="number" id="con-term" min="1" value="360" placeholder="30年請填 360">
+          </div>
+
+          <div class="form-group loan-field">
+            <label for="con-grace">寬限期 (月數)</label>
+            <input type="number" id="con-grace" min="0" value="12" placeholder="例：12 (只繳利息期數)">
+          </div>
+
+          <!-- 租約專用欄位 -->
+          <div class="form-group lease-field hidden">
+            <label for="con-end-date">租約到期日</label>
+            <input type="date" id="con-end-date">
+          </div>
+
+          <div class="form-group lease-field hidden">
+            <label for="con-deposit">租約押金</label>
+            <input type="number" id="con-deposit" min="0" placeholder="例：30000">
+          </div>
+
+          <div class="form-group lease-field hidden">
+            <label for="con-commission">仲介佣金/服務費</label>
+            <input type="number" id="con-commission" min="0" placeholder="例：15000">
+          </div>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="con-file-url">合約檔案連結 (Google Drive URL)</label>
+          <input type="url" id="con-file-url" placeholder="https://drive.google.com/...">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="cancel-contract-modal-btn" class="btn-secondary">取消</button>
+          <button type="submit" class="btn-primary">確認建立</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 編輯攤還期數 Modal -->
+  <div id="edit-schedule-modal" class="modal">
+    <div class="modal-content card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-pen-to-square"></i> 編輯攤還期別數據</h3>
+        <button id="close-schedule-modal-btn" class="btn-close">&times;</button>
+      </div>
+      <form id="edit-schedule-form">
+        <input type="hidden" id="sch-id" value="">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="sch-period">期數</label>
+            <input type="text" id="sch-period" readonly>
+          </div>
+
+          <div class="form-group">
+            <label for="sch-status">狀態</label>
+            <select id="sch-status">
+              <option value="未繳">未繳</option>
+              <option value="已繳">已繳</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="sch-payment">本息合計 ($)</label>
+            <input type="number" id="sch-payment" min="0" step="any" required>
+          </div>
+
+          <div class="form-group">
+            <label for="sch-principal">償還本金 ($)</label>
+            <input type="number" id="sch-principal" min="0" step="any" required>
+          </div>
+
+          <div class="form-group">
+            <label for="sch-interest">支付利息 ($)</label>
+            <input type="number" id="sch-interest" min="0" step="any" required>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="cancel-schedule-modal-btn" class="btn-secondary">取消</button>
+          <button type="submit" class="btn-primary">更新期別資料</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 圖片放大預覽 Modal -->
+  <div id="image-viewer-modal" class="modal image-viewer-modal">
+    <span class="btn-close-viewer">&times;</span>
+    <img id="viewer-img" class="viewer-content" src="" alt="放大收據">
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,15 @@
+# 房產投資合夥財務管理系統 (IFMS) - Git 忽略設定
+
+# 前端私人設定檔 (包含個人 OAuth Client ID 與 GAS API URL)
+frontend/config.js
+
+# 內部系統規格與技術文件
+md/
+
+# 系統與 IDE 暫存檔
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+node_modules/
